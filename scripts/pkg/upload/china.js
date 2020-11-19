@@ -10,7 +10,7 @@ const distPath = path.resolve(__dirname, '../../../dist');
 const TENCENT_BUCKET_NAME = 'sls-standalone-1300963013';
 const TENCENT_REGION = 'ap-shanghai';
 
-module.exports = async versionTag => {
+module.exports = async (versionTag, { isLegacyVersion }) => {
   if (!process.env.TENCENT_SECRET_KEY) {
     process.stdout.write(chalk.red('Missing TENCENT_SECRET_KEY env var \n'));
     process.exitCode = 1;
@@ -35,15 +35,16 @@ module.exports = async versionTag => {
   };
 
   await Promise.all([
-    cos
-      .putObjectAsync({
-        Key: 'latest-tag',
-        Body: Buffer.from(versionTag),
-        ...bucketConf,
-      })
-      .then(() => {
-        process.stdout.write(chalk.green("'latest-tag' uploaded to Tencent\n"));
-      }),
+    !isLegacyVersion &&
+      cos
+        .putObjectAsync({
+          Key: 'latest-tag',
+          Body: Buffer.from(versionTag),
+          ...bucketConf,
+        })
+        .then(() => {
+          process.stdout.write(chalk.green("'latest-tag' uploaded to Tencent\n"));
+        }),
     cos
       .putObjectAsync({
         Key: `${versionTag}/serverless-linux-x64`,
@@ -51,7 +52,7 @@ module.exports = async versionTag => {
         ...bucketConf,
       })
       .then(() => {
-        process.stdout.write(chalk.green("'serverless-linux' uploaded to Tencent\n"));
+        process.stdout.write(chalk.green("'serverless-linux-x64' uploaded to Tencent\n"));
       }),
     cos
       .putObjectAsync({
@@ -60,7 +61,7 @@ module.exports = async versionTag => {
         ...bucketConf,
       })
       .then(() => {
-        process.stdout.write(chalk.green("'serverless-macos' uploaded to Tencent\n"));
+        process.stdout.write(chalk.green("'serverless-macos-x64' uploaded to Tencent\n"));
       }),
   ]);
 };

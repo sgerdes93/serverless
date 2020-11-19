@@ -71,6 +71,7 @@ Here are the available templates for AWS Lambda:
 - aws-fsharp
 - aws-go
 - aws-go-dep
+- aws-go-mod
 
 Check out the [create command docs](../cli-reference/create) for all the details and options.
 
@@ -227,7 +228,7 @@ To configure version pinning define a `frameworkVersion` property in your server
 ```yml
 # serverless.yml
 
-frameworkVersion: "=1.0.3"
+frameworkVersion: '2.1.0'
 
 service: users
 
@@ -244,7 +245,7 @@ provider:
 ```yml
 # serverless.yml
 
-frameworkVersion: ">=1.0.0 <2.0.0"
+frameworkVersion: "^2.1.0" # >=2.1.0 && <3.0.0
 
 service: users
 

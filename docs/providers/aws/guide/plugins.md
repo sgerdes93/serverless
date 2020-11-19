@@ -413,6 +413,244 @@ module.exports = MyPlugin;
 
 Command names need to be unique. If we load two commands and both want to specify the same command (e.g. we have an integrated command `deploy` and an external command also wants to use `deploy`) the Serverless CLI will print an error and exit. If you want to have your own `deploy` command you need to name it something different like `myCompanyDeploy` so they don't clash with existing plugins.
 
+### Extending validation schema
+
+If your plugin adds support for additional params in `serverless.yml` file, you should also add validation rules to the Framework's schema. Otherwise, the Framework may place validation errors to command output about your params.
+
+The Framework uses JSON-schema validation backed by [AJV](https://github.com/ajv-validator/ajv). You can extend [initial schema](/lib/configSchema/index.js) inside your plugin constuctor by using `defineCustomProperties`, `defineFunctionEvent`, `defineFunctionEventProperties`, `defineFunctionProperties` or `defineProvider` helpers.
+
+We'll walk though those helpers. You may also want to check out examples from [helpers tests](tests/fixtures/configSchemaExtensions/test-plugin.js)
+
+#### `defineCustomProperties` helper
+
+Let's say your plugin depends on some properties defined in `custom` section of `serverless.yml` file.
+
+```
+// serverless.yml
+
+custom:
+  yourPlugin:
+    someProperty: foobar
+```
+
+To add validation rules to these properties, your plugin would look like this:
+
+```javascript
+class NewEventPlugin {
+  constructor(serverless) {
+    this.serverless = serverless;
+
+    // Create schema for your properties. For reference use https://github.com/ajv-validator/ajv
+    const newCustomPropSchema = {
+      type: 'object',
+      properties: {
+        someProperty: { type: 'string' },
+      },
+      required: ['someProperty'],
+    };
+
+    // Attach your piece of schema to main schema
+    serverless.configSchemaHandler.defineCustomProperties(newCustomPropSchema);
+  }
+}
+```
+
+This way, if user sets `someProperty` by mistake to `false`, the Framework would display an error:
+
+```
+Serverless: Configuration error: custom.yourPlugin.someProperty should be string
+```
+
+#### `defineFunctionEvent` helper
+
+Let's say your plugin adds support to a new `yourPluginEvent` function event. To use this event, a user would need to have `serverless.yml` file like this:
+
+```
+// serverless.yml
+
+functions:
+  someFunc:
+    handler: handler.main
+    events:
+      - yourPluginEvent:
+          someProp: hello
+          anotherProp: 1
+```
+
+In this case your plugin should add validation rules inside your plugin constructor. Otherwise, the Framework would display an error message saying that your event is not supported:
+
+```
+Serverless: Configuration error: Unsupported function event 'yourPluginEvent'
+```
+
+To fix this error and more importantly to provide validation rules for your event, modify your plugin constructor with code like this:
+
+```javascript
+class NewEventPlugin {
+  constructor(serverless) {
+    this.serverless = serverless;
+
+    // Create schema for your properties. For reference use https://github.com/ajv-validator/ajv
+    serverless.configSchemaHandler.defineFunctionEvent('providerName', 'yourPluginEvent', {
+      type: 'object',
+      properties: {
+        someProp: { type: 'string' },
+        anotherProp: { type: 'number' },
+      },
+      required: ['someProp'],
+      additionalProperties: false,
+    });
+  }
+}
+```
+
+This way, if user sets `anotherProp` by mistake to `some-string`, the Framework would display an error:
+
+```
+Serverless: Configuration error: functions.someFunc.events[0].yourPluginEvent.anotherProp should be number
+```
+
+#### `defineFunctionEventProperties` helper
+
+When your plugin extend other plugin events definition for a specific provider, you can use the `defineFunctionEventProperties` to extend event definition with your custom properties.
+
+For exemple, if your plugin adds support to a new `documentation` property on `http` event from `aws` provider, you should add validations rules inside your plugin constructor for this new property.
+
+```javascript
+class NewEventPlugin {
+  constructor(serverless) {
+    this.serverless = serverless;
+
+    // Create schema for your properties. For reference use https://github.com/ajv-validator/ajv
+    serverless.configSchemaHandler.defineFunctionEventProperties('aws', 'http', {
+      properties: {
+        documentation: { type: 'object' },
+      },
+      required: ['documentation'],
+    });
+  }
+}
+```
+
+This way, if user sets `documentation` by mistake to `anyString`, the Framework would display an error:
+
+```
+Serverless: Configuration error: functions.someFunc.events[0].http.documentation should be object
+```
+
+#### `defineFunctionProperties` helper
+
+Let's say your plugin adds support to a new `someProperty` function property. To use this property, a user would need to have `serverless.yml` file like this:
+
+```
+// serverless.yml
+
+functions:
+  someFunc:
+    handler: handler.main
+    someProperty: my-property-value
+```
+
+In this case your plugin should add validation rules inside your plugin constructor. Otherwise, the Framework would display an error message saying that your property is not supported:
+
+```
+ServerlessError: Configuration error:
+at 'functions.someFunc': unrecognized property 'someProperty'
+```
+
+To fix this error and more importantly to provide validation rules for your property, modify your plugin constructor with code like this:
+
+```javascript
+class NewFunctionPropertiesPlugin {
+  constructor(serverless) {
+    this.serverless = serverless;
+
+    // Create schema for your properties. For reference use https://github.com/ajv-validator/ajv
+    serverless.configSchemaHandler.defineFunctionProperties('providerName', {
+      properties: {
+        someProperty: { type: 'string' },
+        anotherProperty: { type: 'number' },
+      },
+      required: ['someProperty'],
+    });
+  }
+}
+```
+
+This way, if user sets `anotherProperty` by mistake to `hello`, the Framework would display an error:
+
+```
+ServerlessError: Configuration error at 'functions.someFunc.anotherProperty': should be number
+```
+
+#### `defineProvider` helper
+
+In case your plugin provides support for new provider, you would want to adjust validation schema. Here is example:
+
+```javascript
+class NewProviderPlugin {
+  constructor(serverless) {
+    this.serverless = serverless;
+
+    // Create schema for your provider. For reference use https://github.com/ajv-validator/ajv
+    serverless.configSchemaHandler.defineProvider('newProvider', {
+      // Eventual reusable schema definitions (will be put to top level "definitions" object)
+      definitions: {
+        // ...
+      },
+
+      // Top level "provider" properties
+      provider: {
+        properties: {
+          stage: { type: 'string' },
+          remoteFunctionData: { type: 'null' },
+        },
+      },
+
+      // Function level properties
+      function: {
+        properties: { handler: { type: 'string' } },
+      },
+
+      // Function events definitions (can be defined here or via `defineFunctionEvent` helper)
+      functionEvents: {
+        someEvent: {
+          name: 'someEvent',
+          schema: {
+            type: 'object',
+            properties: {
+              someRequiredStringProp: { type: 'string' },
+              someNumberProp: { type: 'number' },
+            },
+            required: ['someRequiredStringProp'],
+            additionalProperties: false,
+          },
+        },
+      },
+
+      // Definition for eventual top level "resources" section
+      resources: {
+        type: 'object',
+        properties: {
+          // ...
+        },
+      },
+
+      // Definition for eventual top level "layers" section
+      layers: {
+        type: 'object',
+        additionalProperties: {
+          type: 'object',
+          properties: {
+            // ...
+          },
+        },
+      },
+    });
+  }
+}
+```
+
 ### Extending the `info` command
 
 The `info` command which is used to display information about the deployment has detailed `lifecycleEvents` you can hook into to add and display custom information.

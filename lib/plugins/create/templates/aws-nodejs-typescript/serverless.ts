@@ -1,4 +1,4 @@
-import { Serverless } from 'serverless/aws';
+import type { Serverless } from 'serverless/aws';
 
 const serverlessConfiguration: Serverless = {
   service: {
@@ -7,7 +7,7 @@ const serverlessConfiguration: Serverless = {
     // app: your-app-name,
     // org: your-org-name,
   },
-  frameworkVersion: '>=1.72.0',
+  frameworkVersion: '2',
   custom: {
     webpack: {
       webpackConfig: './webpack.config.js',

@@ -1,1 +1,3 @@
-/tests/fixtures/configSyntaxError/serverless.yml
+/.nyc_output
+/coverage
+/test/fixtures/configSyntaxError/serverless.yml
